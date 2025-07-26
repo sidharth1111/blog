@@ -11,7 +11,7 @@ let posts = [
     content:
       "Today, I embarked on my journey to build a personal project from scratch. The goal is to create a simple blog API using Node.js and Express.",
     author: "Sidharth",
-    date: new Date().toISOString(),
+    date: "2025-07-26T08:56:37.813Z"
   },
   {
     id: 2,
@@ -19,7 +19,7 @@ let posts = [
     content:
       "Stay tuned for more updates on my personal project. Exciting features and improvements are on the way!",
     author: "Sidharth",
-    date: new Date().toISOString(),
+    date: "2025-07-26T08:56:37.813Z"
   },
 ];
 
