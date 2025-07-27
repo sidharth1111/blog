@@ -3,7 +3,7 @@ import bodyParser from "body-parser";
 import axios from "axios";
 
 const app = express();
-const port = 3001;
+const port = 3000;
 const API_URL = "http://localhost:4001";
 
 app.use(express.static("public"));
@@ -50,7 +50,6 @@ app.post("/api/posts", async (req, res) => {
 });
 
 app.post("/api/posts/:id", async (req, res) => {
-  console.log("called");
   try {
     const response = await axios.patch(
       `${API_URL}/posts/${req.params.id}`,
