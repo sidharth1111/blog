@@ -3,11 +3,13 @@ import express from "express";
 import bodyParser from "body-parser";
 import env from "dotenv";
 import pg from "pg";
+import bcrypt from "bcrypt";
 
 env.config();
 
 const app = express();
 const port = 4001;
+const saltRounds = 10;
 
 const db = new pg.Client({
   user: process.env.USER,
@@ -114,11 +116,17 @@ app.post("/register", async (req, res) => {
     if (checkResult.rows.length > 0) {
       return res.status(400).json({message: "Email already registered. Try logging in."});
     } 
-     await db.query(
+    bcrypt.hash(password, saltRounds, async (err, hash) => {
+      if (err) {
+        console.error("Error hashing password:", err);
+      } else {
+      await db.query(
         "INSERT INTO users (email, password) VALUES ($1, $2)",
-        [email, password]
-     );
-     res.status(201).json({ message: "User registered successfully" });
+        [email, hash]
+      );
+      res.status(201).json({ message: "User registered successfully" });
+    }
+  });
   } catch (err) {
     res.status(500).json({ message: "Registeration failed." });
   }
@@ -126,17 +134,25 @@ app.post("/register", async (req, res) => {
 
 app.post("/login", async (req, res) => {
   const email = req.body.email;
-  const password = req.body.password;
-  console.log("email=", email, "password=", password);
+  const loginPassword = req.body.password;
+  console.log("email=", email, "password=", loginPassword);
   try {
     const checkResult = await db.query("SELECT * FROM users WHERE email = $1", [email]);
     if (checkResult.rows.length > 0) {
-      if (checkResult.rows[0].password == password) {
-        return res.status(201).json({message: "Log in successful."});
-      }
-      else {
-        return res.status(400).json({message: "Incorrect password."});
-      }
+      const user = checkResult.rows[0];
+      const password = user.password;
+
+      bcrypt.compare(loginPassword, password, (err, result) => {
+        if (err) {
+          console.error("Error comparing passwords:", err);
+        } else {
+          if (result) {
+            return res.status(201).json({message: "Log in successful."});
+          } else {
+            return res.status(400).json({message: "Incorrect password."});
+          }
+        }
+      });
     }
     else {
       return res.status(401).json({message: "Email not found."});
