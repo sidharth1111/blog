@@ -40,18 +40,20 @@ app.use(bodyParser.json());
 
 
 // Get all blog posts
-app.get("/posts", (req, res) => {
-  db.query("SELECT * FROM blogs ORDER BY id ASC", (err, dbRes) => {
-    if (err) return res.status(500).json({ message: "Error fetching posts" });
+app.get("/posts", async (req, res) => {
+  try {
+    const dbRes = await db.query("SELECT * FROM blogs ORDER BY id ASC");
     res.json(dbRes.rows);
-  });
+  } catch (err) {
+    return res.status(500).json({ message: "Error fetching posts" });
+  }
 });
 
 
 // Get a single blog post by ID
-app.get("/posts/:id", (req, res) => {
+app.get("/posts/:id", async (req, res) => {
   const { id } = req.params;
-  db.query("SELECT * FROM blogs WHERE id = $1", [id], (err, dbRes) => {
+  const result = await db.query("SELECT * FROM blogs WHERE id = $1", [id], (err, dbRes) => {
     if (err) return res.status(500).json({ message: "Error fetching post" });
     if (dbRes.rows.length === 0) return res.status(404).json({ message: "Post not found" });
     res.json(dbRes.rows[0]);
@@ -98,9 +100,50 @@ app.delete("/posts/:id", (req, res) => {
     (err, dbRes) => {
       if (err) return res.status(500).json({ message: "Error deleting post" });
       if (dbRes.rows.length === 0) return res.status(404).json({ message: "Post not found" });
-      res.json({ message: "Post deleted" });
+      res.json({ message: "Post deleted successfully" });
     }
   );
+});
+
+app.post("/register", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const checkResult = await db.query("SELECT * FROM users WHERE email = $1", [
+      email,
+    ]);
+    if (checkResult.rows.length > 0) {
+      return res.status(400).json({message: "Email already registered. Try logging in."});
+    } 
+     await db.query(
+        "INSERT INTO users (email, password) VALUES ($1, $2)",
+        [email, password]
+     );
+     res.status(201).json({ message: "User registered successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Registeration failed." });
+  }
+});
+
+app.post("/login", async (req, res) => {
+  const email = req.body.email;
+  const password = req.body.password;
+  console.log("email=", email, "password=", password);
+  try {
+    const checkResult = await db.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (checkResult.rows.length > 0) {
+      if (checkResult.rows[0].password == password) {
+        return res.status(201).json({message: "Log in successful."});
+      }
+      else {
+        return res.status(400).json({message: "Incorrect password."});
+      }
+    }
+    else {
+      return res.status(401).json({message: "Email not found."});
+    }
+  } catch (err) {
+    res.status(500).json({message: "Error logging in."})
+  }
 });
 
 app.listen(port, () => {
