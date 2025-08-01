@@ -135,7 +135,6 @@ app.post("/register", async (req, res) => {
 app.post("/login", async (req, res) => {
   const email = req.body.email;
   const loginPassword = req.body.password;
-  console.log("email=", email, "password=", loginPassword);
   try {
     const checkResult = await db.query("SELECT * FROM users WHERE email = $1", [email]);
     if (checkResult.rows.length > 0) {

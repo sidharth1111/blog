@@ -96,7 +96,6 @@ app.post("/register", async (req, res) => {
 app.post("/login", async (req, res) => {
   try {
     const response = await axios.post(`${API_URL}/login`, req.body);
-    console.log("response=", response);
     if (response.status == 201) {
       const response = await axios.get(`${API_URL}/posts`);
       return res.render("index.ejs", { posts: response.data });
