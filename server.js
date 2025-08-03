@@ -97,8 +97,8 @@ app.post("/login", async (req, res) => {
   try {
     const response = await axios.post(`${API_URL}/login`, req.body);
     if (response.status == 201) {
-      const response = await axios.get(`${API_URL}/posts`);
-      return res.render("index.ejs", { posts: response.data });
+      const posts = await axios.get(`${API_URL}/posts`);
+      return res.render("index.ejs", { posts: posts.data });
     }
   }
   catch(error) {
