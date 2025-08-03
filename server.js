@@ -42,7 +42,7 @@ app.get("/edit/:id", async (req, res) => {
 app.post("/api/posts", async (req, res) => {
   try {
     const response = await axios.post(`${API_URL}/posts`, req.body);
-      res.redirect("/posts");
+    res.redirect("/posts");
   } catch (error) {
     res.status(500).json({ message: "Error creating post" });
   }

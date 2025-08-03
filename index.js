@@ -2,7 +2,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 import env from "dotenv";
-import pg from "pg";
+import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 
 env.config();
@@ -11,31 +11,24 @@ const app = express();
 const port = 4001;
 const saltRounds = 10;
 
-const db = new pg.Client({
-  user: process.env.USER,
-  host: process.env.HOST,
-  database: process.env.DATABASE,
-  password: process.env.PASSWORD,
-  port: process.env.PORT,
-});
-db.connect();
+mongoose.connect(`mongodb://localhost:${process.env.MONGO_PORT}/blog`)
 
-// Create blogs table if it doesn't exist
-db.query(`
-  CREATE TABLE IF NOT EXISTS blogs (
-    id SERIAL PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    author VARCHAR(100) NOT NULL,
-    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
-`, (err) => {
-  if (err) {
-    console.error("Error creating blogs table:", err.stack);
-  } else {
-    console.log("Blogs table is ready.");
-  }
+const blogSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  content: { type: String, required: true },
+  author: { type: String, required: true },
+  date: { type: Date, default: Date.now }
 });
+
+const Blog = mongoose.model("Blog", blogSchema);
+
+const UserSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true }
+});
+
+const User = mongoose.model("User", UserSchema);
+
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
@@ -44,8 +37,8 @@ app.use(bodyParser.json());
 // Get all blog posts
 app.get("/posts", async (req, res) => {
   try {
-    const dbRes = await db.query("SELECT * FROM blogs ORDER BY id ASC");
-    res.json(dbRes.rows);
+    const dbRes = await Blog.find();
+    res.json(dbRes);
   } catch (err) {
     return res.status(500).json({ message: "Error fetching posts" });
   }
@@ -55,80 +48,74 @@ app.get("/posts", async (req, res) => {
 // Get a single blog post by ID
 app.get("/posts/:id", async (req, res) => {
   const { id } = req.params;
-  const result = await db.query("SELECT * FROM blogs WHERE id = $1", [id], (err, dbRes) => {
+  try {
+    const result = await Blog.find({_id: id});
+    if (result.length === 0) return res.status(404).json({ message: "Post not found" });
+    res.json(result[0]);
+  }
+  catch (err) {
     if (err) return res.status(500).json({ message: "Error fetching post" });
-    if (dbRes.rows.length === 0) return res.status(404).json({ message: "Post not found" });
-    res.json(dbRes.rows[0]);
-  });
+  }
 });
 
 
 // Create a new blog post
-app.post("/posts", (req, res) => {
+app.post("/posts", async (req, res) => {
   const { title, content, author } = req.body;
-  db.query(
-    "INSERT INTO blogs (title, content, author, date) VALUES ($1, $2, $3, $4) RETURNING *",
-    [title, content, author, new Date()],
-    (err, dbRes) => {
-      if (err) return res.status(500).json({ message: "Error creating post" });
-      res.status(201).json(dbRes.rows[0]);
-    }
-  );
+  try {
+    const newPost = await Blog.create({ title, content, author });
+    return res.status(201).json({ message: "Post created successfully", post: newPost });
+  } catch (err) {
+    return res.status(500).json({ message: "Error creating post" });
+  }
 });
 
 
 // Update an existing blog post
-app.patch("/posts/:id", (req, res) => {
+app.patch("/posts/:id", async (req, res) => {
   const { title, content, author } = req.body;
   const { id } = req.params;
-  db.query(
-    "UPDATE blogs SET title = $1, content = $2, author = $3 WHERE id = $4 RETURNING *",
-    [title, content, author, id],
-    (err, dbRes) => {
-      if (err) return res.status(500).json({ message: "Error updating post" });
-      if (dbRes.rows.length === 0) return res.status(404).json({ message: "Post not found" });
-      res.json(dbRes.rows[0]);
-    }
-  );
+
+  try {
+    await Blog.updateOne({_id: id}, {$set: {title, content, author}});
+    return res.status(200).json({ message: "Post updated successfully" });
+  } catch (err) {
+    return res.status(500).json({ message: "Error updating post" });
+  }
 });
 
 
 // Delete a blog post
-app.delete("/posts/:id", (req, res) => {
+app.delete("/posts/:id", async (req, res) => {
   const { id } = req.params;
-  db.query(
-    "DELETE FROM blogs WHERE id = $1 RETURNING *",
-    [id],
-    (err, dbRes) => {
-      if (err) return res.status(500).json({ message: "Error deleting post" });
-      if (dbRes.rows.length === 0) return res.status(404).json({ message: "Post not found" });
-      res.json({ message: "Post deleted successfully" });
-    }
-  );
+  try {
+    await Blog.deleteOne({_id: id});
+    res.status(200).json({ message: "Post deleted successfully" });
+  } catch (err) {
+    return res.status(500).json({ message: "Error deleting post" });
+  }
 });
 
 app.post("/register", async (req, res) => {
   const { email, password } = req.body;
   try {
-    const checkResult = await db.query("SELECT * FROM users WHERE email = $1", [
-      email,
-    ]);
-    if (checkResult.rows.length > 0) {
-      return res.status(400).json({message: "Email already registered. Try logging in."});
-    } 
-    bcrypt.hash(password, saltRounds, async (err, hash) => {
-      if (err) {
-        console.error("Error hashing password:", err);
-      } else {
-      await db.query(
-        "INSERT INTO users (email, password) VALUES ($1, $2)",
-        [email, hash]
-      );
-      res.status(201).json({ message: "User registered successfully" });
+    const checkResult = await User.findOne({ email });
+    if (checkResult) {
+      return res.status(400).json({ message: "Email already registered. Try logging in." });
     }
-  });
+    const hash = await bcrypt.hash(password, saltRounds);
+    try {
+      await User.create({ email, password: hash });
+      await User.find();
+      return res.status(201).json({ message: "User registered successfully" });
+    } catch (err) {
+      console.error("Error creating user:", err);
+      return res.status(500).json({ message: "Registration failed." });
+    }
+
   } catch (err) {
-    res.status(500).json({ message: "Registeration failed." });
+    console.error("Error in registration route:", err);
+    return res.status(500).json({ message: "Registration failed." });
   }
 });
 
@@ -136,9 +123,9 @@ app.post("/login", async (req, res) => {
   const email = req.body.email;
   const loginPassword = req.body.password;
   try {
-    const checkResult = await db.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (checkResult.rows.length > 0) {
-      const user = checkResult.rows[0];
+    const checkResult = await User.findOne({ email });
+    if (checkResult) {
+      const user = checkResult;
       const password = user.password;
 
       bcrypt.compare(loginPassword, password, (err, result) => {
